@@ -26,14 +26,13 @@ const LABELS = {
     target: "Soll",
     heater: "Truma Combi",
     boiler: "Boiler",
-    status: "Status",
     energy_mix: "Energie",
     error: "Fehler",
     heats_to: "heizt auf",
     reached: "Soll erreicht",
     off: "Aus",
     on: "Ein",
-    no_error: "keiner",
+    no_error: "kein Fehler",
     unavailable: "nicht verfügbar",
     mode_off: "kein Warmwasser",
     mode_eco: "Wasser 40 °C",
@@ -50,14 +49,13 @@ const LABELS = {
     target: "Target",
     heater: "Truma Combi",
     boiler: "Boiler",
-    status: "Status",
     energy_mix: "Energy",
     error: "Error",
     heats_to: "heating to",
     reached: "target reached",
     off: "Off",
     on: "On",
-    no_error: "none",
+    no_error: "no error",
     unavailable: "unavailable",
     mode_off: "no hot water",
     mode_eco: "water 40 °C",
@@ -74,6 +72,12 @@ const BOILER_ICONS = {
   eco: "mdi:water-thermometer-outline",
   hot: "mdi:fire",
   on: "mdi:water-boiler",
+};
+
+const MIX_ICONS = {
+  fuel: "mdi:fuel",
+  electricity: "mdi:flash",
+  mix: "mdi:lightning-bolt-circle",
 };
 
 // Flache Darstellung: Wohnraum ← Warmluft ← Truma Combi → Warmwasser → Boiler
@@ -363,12 +367,20 @@ class TrumaCard extends HTMLElement {
         <div class="value"><span class="num">—</span><span class="unit"></span></div>
         <div class="sub"></div>
       </div>`;
+    const chip = (key) => `
+      <span class="chip" data-key="${key}" tabindex="0" role="button" title="${this._t(key)}">
+        <ha-icon></ha-icon><span class="chip-text">—</span>
+      </span>`;
     const diagram = DIAGRAM.replace(/\{(\w+)\}/g, (_, k) => escapeHtml(this._t(k)));
 
     this.shadowRoot.innerHTML = `
       <style>${STYLES}</style>
       <ha-card>
-        ${c.name ? `<div class="header">${escapeHtml(c.name)}</div>` : ""}
+        ${c.name || c.energy_mix || c.error ? `
+          <div class="header">
+            <span class="title">${escapeHtml(c.name || "")}</span>
+            ${chip("energy_mix")}${chip("error")}
+          </div>` : ""}
         ${c.show_diagram !== false ? diagram : ""}
         <div class="groups">
           <section class="group heat">
@@ -395,10 +407,6 @@ class TrumaCard extends HTMLElement {
               <div class="sub"></div>
             </div>
             <div class="modes"></div>
-          </section>
-          <section class="group device">
-            <div class="group-head"><ha-icon class="device-icon" icon="mdi:information-outline"></ha-icon>${this._t("status")}</div>
-            <div class="pair">${val("energy_mix", "energy_mix")}${val("error", "error")}</div>
           </section>
         </div>
       </ha-card>`;
@@ -427,6 +435,15 @@ class TrumaCard extends HTMLElement {
     const unitEl = el.querySelector(".unit");
     if (unitEl) unitEl.textContent = unavailable ? "" : unit;
     el.querySelector(".sub").textContent = unavailable ? this._t("unavailable") : sub;
+  }
+
+  _setChip(key, data, text, icon, level = "") {
+    const el = this.shadowRoot.querySelector(`.chip[data-key="${key}"]`);
+    if (!el) return;
+    el.classList.toggle("hidden", !data);
+    el.dataset.level = level;
+    el.querySelector("ha-icon").setAttribute("icon", icon);
+    el.querySelector(".chip-text").textContent = text;
   }
 
   _update() {
@@ -517,24 +534,20 @@ class TrumaCard extends HTMLElement {
       b.disabled = !mode || !!busy || active;
     });
 
-    // ---- Status
+    // ---- Status als Chips in der Titelzeile
     const mix = this._stateObj("energy_mix");
     const err = this._stateObj("error");
     const mixState = mix?.stateObj?.state;
-    this._setVal("energy_mix", mixState ? capitalize(this._t(mixState)) : "", {
-      unavailable: !mixState,
-      hidden: !mix,
-    });
+    this._setChip("energy_mix", mix, mixState ? capitalize(this._t(mixState)) : "—", MIX_ICONS[mixState] || "mdi:lightning-bolt");
     const errState = err?.stateObj?.state;
     const hasError = !!errState && !["none", "0", "ok", "no_error"].includes(errState.toLowerCase());
-    this._setVal("error", hasError ? errState : this._t("no_error"), {
-      unavailable: !errState,
-      hidden: !err,
-    });
-    const device = root.querySelector(".group.device");
-    device.classList.toggle("hidden", !mix && !err);
-    device.dataset.level = hasError ? "critical" : "ok";
-    root.querySelector(".device-icon").setAttribute("icon", hasError ? "mdi:alert-circle" : "mdi:information-outline");
+    this._setChip(
+      "error",
+      err,
+      !errState ? "—" : hasError ? errState : this._t("no_error"),
+      hasError ? "mdi:alert-circle" : "mdi:check-circle-outline",
+      hasError ? "critical" : "ok"
+    );
 
     // ---- Grafik
     const svg = root.querySelector(".diagram");
@@ -639,9 +652,23 @@ const STYLES = `
   .hidden { display: none !important; }
   button { font: inherit; color: inherit; }
   .header {
+    display: flex; align-items: center; gap: 6px;
     padding: 16px 16px 0; font-size: 1.25em; font-weight: 500;
     color: var(--primary-text-color);
   }
+  .title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip {
+    --c: var(--truma-device);
+    flex: none; display: inline-flex; align-items: center; gap: 4px; max-width: 45%;
+    padding: 3px 10px 3px 7px; border-radius: 999px; cursor: pointer;
+    font-size: 0.6em; font-weight: 600; white-space: nowrap;
+    background: color-mix(in srgb, var(--c) 16%, transparent); color: var(--c);
+  }
+  .chip ha-icon { --mdc-icon-size: 16px; flex: none; }
+  .chip-text { overflow: hidden; text-overflow: ellipsis; }
+  .chip[data-level="ok"] { --c: var(--truma-ok); }
+  .chip[data-level="critical"] { --c: var(--truma-crit); }
+  .chip:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
 
   /* ---- Grafik ---- */
   .diagram { display: block; width: 100%; max-width: 440px; margin: 8px auto 0; padding: 0 12px; box-sizing: border-box; }
@@ -724,8 +751,6 @@ const STYLES = `
   }
   .group.water { --c: var(--truma-water); }
   .group.water[data-mode="hot"] { --c: var(--truma-hot); }
-  .group.device { --c: var(--truma-device); grid-column: 1 / -1; }
-  .group.device[data-level="critical"] { --c: var(--truma-crit); }
   .group.heat[data-state="off"] .val.primary .num,
   .group.water[data-mode="off"] .val.primary .num { color: var(--secondary-text-color); }
   .group-head {
@@ -734,7 +759,6 @@ const STYLES = `
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .group-head ha-icon { --mdc-icon-size: 20px; flex: none; }
-  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .val { cursor: pointer; min-width: 0; border-radius: 6px; }
   .val:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 2px; }
   .label { font-size: 0.75em; color: var(--secondary-text-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -745,7 +769,6 @@ const STYLES = `
   .val.unavailable .num { color: var(--disabled-text-color, #999); }
   .sub { font-size: 0.75em; color: var(--secondary-text-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .sub:empty { display: none; }
-  .group.device[data-level="critical"] .val[data-key="error"] .num { color: var(--c); }
 
   /* ---- Bedienung ---- */
   .ctrl { display: flex; align-items: center; gap: 10px; margin-top: auto; }

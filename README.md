@@ -17,7 +17,9 @@ farbigen Gruppen, passend zur Grafik:
 
 - **Orange – Heizung:** Raumtemperatur, Ein/Aus, Soll-Temperatur mit − / +
 - **Blau – Boiler:** aktueller Modus und Auswahl Aus / Eco / Hot (Hot rot)
-- **Grau – Status:** Energiemix und Fehler (rot, sobald ein Fehler anliegt)
+
+Rechts neben dem Titel zeigen zwei kleine Chips den Energiemix und den
+Fehlerstatus (grün „kein Fehler“, rot mit Fehlercode, sobald ein Fehler anliegt).
 
 ![Vorschau](images/preview.png)
 
@@ -55,11 +57,11 @@ error: sensor.truma_combi_d_4_error
 
 | Option | Typ | Standard | Beschreibung |
 |---|---|---|---|
-| `name` | string | `Truma Combi` | Titel; leer = kein Kopfbereich |
+| `name` | string | `Truma Combi` | Titel; leer und ohne Chips = kein Kopfbereich |
 | `climate` | entity | – | Thermostat der Heizung (`climate.*`) mit `current_temperature` |
 | `boiler` | entity | – | Auswahl-Entität (`select.*`) mit den Optionen des Boilers, z. B. `Aus`, `Eco`, `Hot` |
-| `energy_mix` | entity | – | Energiemix (`fuel` / `electricity` / `mix`), nur Anzeige |
-| `error` | entity | – | Fehlercode; `none` gilt als „kein Fehler“ |
+| `energy_mix` | entity | – | Energiemix (`fuel` / `electricity` / `mix`), Chip in der Titelzeile |
+| `error` | entity | – | Fehlercode als Chip in der Titelzeile; `none` gilt als „kein Fehler“ |
 | `default_temperature` | number | `20` | Soll-Temperatur beim ersten Einschalten |
 | `max_delta` | number | `10` | Differenz Soll–Ist, bei der die Warmluft-Animation am schnellsten läuft |
 | `show_diagram` | boolean | `true` | Grafik anzeigen |
