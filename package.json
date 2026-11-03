@@ -1,0 +1,10 @@
+{
+  "name": "truma-card",
+  "version": "1.0.0",
+  "description": "Home Assistant Lovelace-Karte für Truma Combi Heizung und Boiler",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs"
+  },
+  "license": "MIT"
+}

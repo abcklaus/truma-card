@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Truma Card – Demo</title>
+  <style>
+    :root {
+      --primary-background-color: #fafafa;
+      --card-background-color: #ffffff;
+      --primary-text-color: #212121;
+      --secondary-text-color: #727272;
+      --primary-color: #03a9f4;
+      --divider-color: #e0e0e0;
+    }
+    :root[data-theme="dark"] {
+      --primary-background-color: #111111;
+      --card-background-color: #1c1c1c;
+      --primary-text-color: #e1e1e1;
+      --secondary-text-color: #9b9b9b;
+      --divider-color: #333333;
+    }
+    body {
+      margin: 0;
+      padding: 24px 16px;
+      background: var(--primary-background-color);
+      color: var(--primary-text-color);
+      font-family: Roboto, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    main { max-width: 900px; margin: 0 auto; }
+    h1 { font-size: 1.4em; font-weight: 500; }
+    .controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-bottom: 16px; }
+    .cards { display: grid; grid-template-columns: minmax(0, 440px) minmax(0, 1fr); gap: 16px; }
+    @media (max-width: 700px) { .cards { grid-template-columns: 1fr; } }
+    pre { font-size: 12px; max-height: 300px; overflow: auto; background: var(--card-background-color); padding: 8px; border: 1px solid var(--divider-color); }
+  </style>
+  <script>
+    // Minimal stand-in for Home Assistant's <ha-card> und <ha-icon>
+    customElements.define("ha-card", class extends HTMLElement {
+      connectedCallback() {
+        Object.assign(this.style, {
+          display: "block",
+          background: "var(--card-background-color)",
+          borderRadius: "12px",
+          border: "1px solid var(--divider-color)",
+        });
+      }
+    });
+    const ICONS = {
+      "mdi:radiator": "♨", "mdi:radiator-off": "♨", "mdi:power": "⏻", "mdi:minus": "−", "mdi:plus": "+",
+      "mdi:water-boiler": "🛢", "mdi:water-boiler-alert": "⚠", "mdi:water-off-outline": "⦸",
+      "mdi:water-thermometer-outline": "🌡", "mdi:fire": "🔥", "mdi:information-outline": "ℹ", "mdi:alert-circle": "⚠",
+    };
+    customElements.define("ha-icon", class extends HTMLElement {
+      static get observedAttributes() { return ["icon"]; }
+      attributeChangedCallback() { this.textContent = ICONS[this.getAttribute("icon")] ?? "•"; }
+      connectedCallback() { this.style.display = "inline-flex"; this.style.justifyContent = "center"; this.style.minWidth = "1.2em"; this.attributeChangedCallback(); }
+    });
+  </script>
+  <script src="../dist/truma-card.js"></script>
+</head>
+<body>
+<main>
+  <h1>Truma Card – Demo</h1>
+  <div class="controls">
+    <label><input id="dark" type="checkbox"> Dunkles Theme</label>
+    <label><input id="error" type="checkbox"> Fehler</label>
+    <label><input id="unavailable" type="checkbox"> Gerät nicht verfügbar</label>
+  </div>
+  <div class="cards">
+    <truma-card id="card"></truma-card>
+    <div>
+      <strong>Gesendete Service-Calls</strong>
+      <pre id="log"></pre>
+    </div>
+  </div>
+</main>
+<script>
+  // Simulierte Truma wie das MQTT-Template: Soll 0 = aus
+  // Startzustand per URL, z. B. ?target=22&boiler=Eco&dark=1
+  const params = new URLSearchParams(location.search);
+  const dev = {
+    target: Number(params.get("target") ?? 0),
+    current: Number(params.get("current") ?? 17.4),
+    boiler: params.get("boiler") || "Aus",
+    mix: "fuel",
+  };
+  if (params.get("dark")) {
+    document.documentElement.dataset.theme = "dark";
+    document.getElementById("dark").checked = true;
+  }
+  if (params.get("error")) document.getElementById("error").checked = true;
+  const card = document.getElementById("card");
+  if (params.get("width")) card.style.width = params.get("width") + "px";
+  const log = document.getElementById("log");
+
+  function states() {
+    if (document.getElementById("unavailable").checked) {
+      return { "climate.truma_air": { state: "unavailable", attributes: {} } };
+    }
+    const on = dev.target > 0;
+    return {
+      "climate.truma_air": {
+        state: on ? "heat" : "off",
+        attributes: {
+          current_temperature: dev.current, temperature: dev.target, hvac_action: on ? "heating" : "idle",
+          hvac_modes: ["off", "heat"], min_temp: 5, max_temp: 30, target_temp_step: 1,
+        },
+      },
+      "select.truma_combi_d_4_truma_boiler": { state: dev.boiler, attributes: { options: ["Aus", "Eco", "Hot"] } },
+      "select.truma_combi_d_4_energy_mix": { state: dev.mix, attributes: { options: ["fuel", "electricity", "mix"] } },
+      "sensor.truma_combi_d_4_error": { state: document.getElementById("error").checked ? "W 255H" : "none", attributes: {} },
+    };
+  }
+
+  function push() {
+    card.hass = { language: "de", locale: { language: "de" }, states: states(), callService };
+  }
+
+  function later(fn) { setTimeout(() => { fn(); push(); }, 700); }
+
+  function callService(domain, service, data, target) {
+    log.textContent = `${domain}.${service} ${JSON.stringify({ ...data, ...target })}\n` + log.textContent;
+    if (service === "set_temperature") later(() => { dev.target = data.temperature; });
+    if (service === "set_hvac_mode") later(() => { dev.target = data.hvac_mode === "off" ? 0 : dev.target; });
+    if (service === "select_option") later(() => { dev.boiler = data.option; });
+    return Promise.resolve();
+  }
+
+  card.setConfig({
+    type: "custom:truma-card",
+    name: "Truma Combi",
+    climate: "climate.truma_air",
+    boiler: "select.truma_combi_d_4_truma_boiler",
+    energy_mix: "select.truma_combi_d_4_energy_mix",
+    error: "sensor.truma_combi_d_4_error",
+  });
+  push();
+  document.getElementById("unavailable").addEventListener("change", push);
+  document.getElementById("error").addEventListener("change", push);
+  document.getElementById("dark").addEventListener("change", (e) => {
+    document.documentElement.dataset.theme = e.target.checked ? "dark" : "light";
+  });
+</script>
+</body>
+</html>
